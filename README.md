@@ -38,6 +38,8 @@ make build
 
 ## Использование
 
+### LSP-сервер (для редакторов)
+
 Сервер работает через stdin/stdout. Подключите его как LSP-сервер в вашем редакторе:
 
 ```json
@@ -45,6 +47,26 @@ make build
   "command": "/path/to/bsl-lsp",
   "args": []
 }
+```
+
+### CLI (проверка и форматирование)
+
+```bash
+bsl-lsp check <file.bsl>...          # синтаксис + статический анализ
+bsl-lsp format <file.bsl>...         # автоформатирование (in-place)
+bsl-lsp format --stdout <file.bsl>   # вывод результата в stdout
+```
+
+Пример проверки:
+```text
+$ bsl-lsp check module.bsl
+module.bsl:10:0: [info/empty-block] Пустое тело блока Иначе
+module.bsl:7:1: [warning/missing-return] Функция "ПолучитьИзКэша" — не во всех ветках есть Возврат
+```
+
+Пример форматирования:
+```bash
+bsl-lsp format --stdout messy.bsl > clean.bsl
 ```
 
 ### VS Code
@@ -89,27 +111,6 @@ go build ./... && go test ./... && go vet ./...
 
 Подробнее — [AGENTS.md](AGENTS.md) и [ROADMAP.md](ROADMAP.md).
 
-## Архитектура
-
-```
-cmd/bsl-lsp/          — точка входа
-internal/lsp/         — JSON-RPC 2.0, session, handler
-internal/parser/      — лексер + рекурсивный спуск + AST
-internal/analysis/    — symbol table, навигация, keywords, formatter
-internal/analysis/linters/ — статический анализ BSL (9 правил)
-internal/workspace/   — thread-safe Document + Manager
-pkg/protocol/         — LSP типы
-```
-
-### Ключевые архитектурные решения
-
-- **Zero external dependencies** — только stdlib Go
-- **`#Область` внутри процедур** — разрешена (распространённая практика в BSL)
-- **`#Если` внутри процедур** — ошибка (невалидный BSL)
-- **`_` как LHS присваивания** — ошибка
-- **`TokenEqual` на верхнем уровне** — break, чтобы `А = 10` парсилось как `AssignmentStmt`, а не `BinaryExpr`
-- **Сравнение литералов** (`5 = 5`) — `BinaryExpr`, не путается с присваиванием
-
 ## OpenCode Skill
 
 Проект включает [SKILL.md](SKILL.md) — инструкцию для ИИ-агента [OpenCode](https://opencode.ai), добавляющую два инструмента:
@@ -123,8 +124,6 @@ Skill устанавливается копированием в `~/.cursor/skil
 ```bash
 cp -r skills/bsl-lsp-skill ~/.cursor/skills/bsl-lsp
 ```
-
-Текущее ограничение: bsl-lsp работает только через LSP (stdin/stdout). Для CLI-режима требуется добавить subcommands `check`/`format` (см. [ROADMAP.md](ROADMAP.md#critical-context)).
 
 ## Лицензия
 

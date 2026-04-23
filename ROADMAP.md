@@ -35,23 +35,23 @@
 - [x] Тесты для каждого правила (позитивные + негативные)
 - [x] Сохранение zero external dependencies
 
-## Critical Context
+## ✅ Фаза E — CLI режим
+- [x] Subcommands `check` и `format` в `cmd/bsl-lsp/main.go`
+- [x] `bsl-lsp check <file>` — синтаксис + статический анализ (9 правил), human-readable вывод
+- [x] `bsl-lsp format <file>` — автоформатирование in-place
+- [x] `bsl-lsp format --stdout <file>` — вывод результата в stdout
+- [x] `bsl-lsp lsp` / `bsl-lsp` (без аргументов) — LSP-сервер (обратная совместимость)
+- [x] `bsl-lsp --help` — справка
+- [x] SKILL.md обновлён на прямой вызов CLI (без LSP-обёрток)
+- [x] Сохранение zero external dependencies
 
-> Текущее состояние: bsl-lsp работает **только через LSP (stdin/stdout)**. CLI-режима для одноразовых вызовов (`check`, `format`) нет.
->
-> **Проблема:** для интеграции с OpenCode (через SKILL.md) нужны CLI-команды `bsl-lsp check <file>` и `bsl-lsp format <file>`, т.к. агент выполняет Bash/PowerShell, а не LSP.
->
-> **Варианты решения:**
-> - **A** — добавить CLI-режим в `cmd/bsl-lsp/` (subcommands `check`, `format`)
-> - **B** — написать PowerShell-обёртку, вызывающую LSP через stdin/stdout (без изменений Go-кода)
->
-> **Связанные файлы:**
-> - `internal/lsp/` — LSP handler (можно переиспользовать для CLI)
-> - `internal/analysis/linters/` — 9 правил стат. анализа
-> - `internal/analysis/formatter.go` — форматирование
-> - `internal/parser/` — парсер
+## Critical Context (реализовано)
 
-## 🔲 Фаза E — промышленное качество
+> CLI-режим добавлен: `bsl-lsp check <file>` и `bsl-lsp format <file>`.  
+> SKILL.md использует прямой вызов CLI вместо LSP-обёрток.  
+> Выбран вариант **A** — subcommands в `cmd/bsl-lsp/` с ручным dispatch через `os.Args`.
+
+## 🔲 Фаза F — промышленное качество
 - [ ] Бенчмарки (10k+ строк), zero-alloc paths
 - [ ] Структурированные логи (slog, уровни, structured)
 - [ ] Конфигурация LSP через `initialize` (опции клиента)
