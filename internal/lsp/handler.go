@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/karavaikov/bsl-lsp/internal/analysis"
+	"github.com/karavaikov/bsl-lsp/internal/analysis/linters"
 	"github.com/karavaikov/bsl-lsp/internal/parser"
 	"github.com/karavaikov/bsl-lsp/internal/workspace"
 	"github.com/karavaikov/bsl-lsp/pkg/protocol"
@@ -238,6 +239,22 @@ func (h *Handler) publishDiagnostics(uri string) {
 		symbols: symbols,
 	}
 	h.project.UpdateModule(uri, symbols)
+
+	linterDiags := linters.RunAll(mod, symbols)
+	for _, ld := range linterDiags {
+		length := ld.Length
+		if length < 1 {
+			length = 1
+		}
+		diagnostics = append(diagnostics, protocol.Diagnostic{
+			Range: protocol.Range{
+				Start: protocol.Position{Line: ld.Line, Character: ld.Col},
+				End:   protocol.Position{Line: ld.Line, Character: ld.Col + length},
+			},
+			Severity: protocol.DiagnosticSeverity(ld.Severity),
+			Message:  fmt.Sprintf("[%s] %s", ld.Code, ld.Message),
+		})
+	}
 
 	diagParams := struct {
 		URI         string                `json:"uri"`

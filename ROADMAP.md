@@ -29,7 +29,13 @@
 - [x] `5 = 5` (сравнение литералов) — корректный `BinaryExpr`, НЕ путается с присваиванием
 - [x] `TokenEqual` break на `precLowest` — хак для различия присваивания и сравнения
 
-## 🔲 Фаза D — промышленное качество
+## ✅ Фаза D — статический анализ (BSL-HC)
+- [x] **Пакет `internal/analysis/linters/`** — 9 правил: `unused-variable`, `empty-block`, `unreachable-code`, `magic-number`, `too-many-params`, `nested-depth`, `suspicious-assignment`, `missing-return`, `global-var-in-proc`
+- [x] Интеграция в `publishDiagnostics` — диагностики линтеров публикуются вместе с ошибками парсера
+- [x] Тесты для каждого правила (позитивные + негативные)
+- [x] Сохранение zero external dependencies
+
+## 🔲 Фаза E — промышленное качество
 - [ ] Бенчмарки (10k+ строк), zero-alloc paths
 - [ ] Структурированные логи (slog, уровни, structured)
 - [ ] Конфигурация LSP через `initialize` (опции клиента)

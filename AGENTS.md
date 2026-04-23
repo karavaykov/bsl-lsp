@@ -12,6 +12,7 @@
 > - `module_edge.bsl`: невалидный `Для Каждого Из Таблица Цикл` удалён (BSL требует переменную цикла)
 > - `TokenEqual` на `precLowest` → break, чтобы `А = 10` парсилось как `AssignmentStmt`, а не `BinaryExpr`
 > - `#Если`/`#ИначеЕсли`/`#Иначе`/`#КонецЕсли` внутри процедуры/блока → ошибка (невалидный BSL)
+> - `internal/analysis/linters/` — 9 правил статического анализа, интегрированных в `publishDiagnostics`. При добавлении нового правила: создай файл в пакете `linters`, добавь функцию `checkXxx` в `rules` в `lint.go`, напиши тесты.
 
 
 
@@ -36,6 +37,19 @@ go vet ./...                        # статический анализ
   - `symbol.go` — symbol table: `BuildSymbolTable(mod)` обходит AST, строит области видимости
   - `navigate.go` — `FindIdentAtPos(mod, line, col)` ищет идентификатор в AST по позиции (GoToDefinition, Hover)
   - `keywords.go` — `BSLKeywords` (34 keyword), `BSLGlobalMethods` (глобальные функции 1С)
+  - `formatter.go` — `FormatDocument` — полное форматирование BSL
+  - `semantic.go` — `CollectSemanticTokens`, `CollectFoldingRanges`, `FindCallAtPos`
+- **`internal/analysis/linters/`**:
+  - `lint.go` — `RunAll(mod, st)` — запускает все 9 правил статического анализа
+  - `unused_var.go` — неиспользуемые переменные/параметры
+  - `empty_block.go` — пустые блоки (процедура/функция/если/цикл/попытка)
+  - `unreachable.go` — код после `Возврат`/`ВызватьИсключение`/`Прервать`/`Продолжить`
+  - `magic_number.go` — магические числа (>3)
+  - `too_many_params.go` — >7 параметров
+  - `nested_depth.go` — глубина вложенности >5
+  - `suspicious_assign.go` — самоприсваивание (`a = a`)
+  - `missing_return.go` — функция без `Возврат` в некоторых ветках
+  - `global_var_in_proc.go` — присваивание глобальной переменной внутри процедуры
 - **`internal/workspace/document.go`** — thread-safe Document + Manager
 - **`pkg/protocol/types.go`** — LSP типы
 
