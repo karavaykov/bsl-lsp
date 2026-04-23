@@ -110,6 +110,22 @@ pkg/protocol/         — LSP типы
 - **`TokenEqual` на верхнем уровне** — break, чтобы `А = 10` парсилось как `AssignmentStmt`, а не `BinaryExpr`
 - **Сравнение литералов** (`5 = 5`) — `BinaryExpr`, не путается с присваиванием
 
+## OpenCode Skill
+
+Проект включает [SKILL.md](SKILL.md) — инструкцию для ИИ-агента [OpenCode](https://opencode.ai), добавляющую два инструмента:
+
+| Инструмент | Описание |
+|------------|----------|
+| `check_bsl` | Проверка синтаксиса + статический анализ BSL-файла (9 правил) |
+| `format_bsl` | Автоформатирование BSL-файла |
+
+Skill устанавливается копированием в `~/.cursor/skills/bsl-lsp/`:
+```bash
+cp -r skills/bsl-lsp-skill ~/.cursor/skills/bsl-lsp
+```
+
+Текущее ограничение: bsl-lsp работает только через LSP (stdin/stdout). Для CLI-режима требуется добавить subcommands `check`/`format` (см. [ROADMAP.md](ROADMAP.md#critical-context)).
+
 ## Лицензия
 
 MIT
