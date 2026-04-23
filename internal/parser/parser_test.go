@@ -513,3 +513,128 @@ func TestParser_IndexAccess(t *testing.T) {
 	assign := mod.Statements[0].(*AssignmentStmt)
 	_ = assign.Right.(*IndexExpr)
 }
+
+func TestParser_Error_UnclosedString(t *testing.T) {
+	input := `Процедура Тест()
+	Стр = "незакрытая строка
+	А = 1
+КонецПроцедуры`
+	p := NewParser(input)
+	p.ParseModule()
+	errs := p.Errors()
+	if len(errs) == 0 {
+		t.Error("expected error for unclosed string, got none")
+	}
+}
+
+func TestParser_Error_StrayRParen(t *testing.T) {
+	input := `Процедура Тест()
+	)
+КонецПроцедуры`
+	p := NewParser(input)
+	p.ParseModule()
+	errs := p.Errors()
+	if len(errs) == 0 {
+		t.Error("expected error for stray ), got none")
+	}
+}
+
+func TestParser_Error_TryWithoutExcept(t *testing.T) {
+	input := `Процедура Тест()
+	Попытка
+		А = 1
+	КонецПопытки
+КонецПроцедуры`
+	p := NewParser(input)
+	p.ParseModule()
+	errs := p.Errors()
+	if len(errs) == 0 {
+		t.Error("expected error for try without except, got none")
+	}
+}
+
+func TestParser_Error_NewWithoutType(t *testing.T) {
+	input := `Процедура Тест()
+	Объект = Новый
+КонецПроцедуры`
+	p := NewParser(input)
+	p.ParseModule()
+	errs := p.Errors()
+	if len(errs) == 0 {
+		t.Error("expected error for Новый without type, got none")
+	}
+}
+
+func TestParser_Error_GotoWithoutLabel(t *testing.T) {
+	input := `Процедура Тест()
+	Перейти
+КонецПроцедуры`
+	p := NewParser(input)
+	p.ParseModule()
+	errs := p.Errors()
+	if len(errs) == 0 {
+		t.Error("expected error for Перейти without label, got none")
+	}
+}
+
+func TestParser_Error_ProcWithoutName(t *testing.T) {
+	input := `Процедура ()
+	А = 1
+КонецПроцедуры`
+	p := NewParser(input)
+	p.ParseModule()
+	errs := p.Errors()
+	if len(errs) == 0 {
+		t.Error("expected error for procedure without name, got none")
+	}
+}
+
+func TestParser_Error_EmptyParams(t *testing.T) {
+	input := `Процедура Тест(А, , Б)
+	Сообщить(А)
+КонецПроцедуры`
+	p := NewParser(input)
+	p.ParseModule()
+	errs := p.Errors()
+	if len(errs) == 0 {
+		t.Error("expected error for empty parameter, got none")
+	}
+}
+
+func TestParser_Error_ForWithoutVar(t *testing.T) {
+	input := `Процедура Тест()
+	Для 1 По 10 Цикл
+		А = А + 1
+	КонецЦикла
+КонецПроцедуры`
+	p := NewParser(input)
+	p.ParseModule()
+	errs := p.Errors()
+	if len(errs) == 0 {
+		t.Error("expected error for Для without variable, got none")
+	}
+}
+
+func TestParser_Error_LiteralAsStmt(t *testing.T) {
+	input := `Процедура Тест()
+	42
+КонецПроцедуры`
+	p := NewParser(input)
+	p.ParseModule()
+	errs := p.Errors()
+	if len(errs) == 0 {
+		t.Error("expected error for literal as statement, got none")
+	}
+}
+
+func TestParser_UnderscoreIdent(t *testing.T) {
+	input := `Процедура Тест()
+	_var = 1
+КонецПроцедуры`
+	p := NewParser(input)
+	p.ParseModule()
+	errs := p.Errors()
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+}

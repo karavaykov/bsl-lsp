@@ -29,11 +29,18 @@ func TestRealBSLParseFiles(t *testing.T) {
 			input := string(data)
 			p := NewParser(input)
 			p.ParseModule()
-			if errs := p.Errors(); len(errs) > 0 {
-				for _, e := range errs {
-					t.Errorf("line %d:%d: %s", e.Line, e.Col, e.Message)
+			errs := p.Errors()
+			if strings.HasPrefix(entry.Name(), "bug_") {
+				if len(errs) == 0 {
+					t.Errorf("BUG: parser did not report error for %s", entry.Name())
 				}
-				fmt.Fprintf(os.Stderr, "=== %s ===\n%s\n", entry.Name(), input)
+			} else {
+				if len(errs) > 0 {
+					for _, e := range errs {
+						t.Errorf("line %d:%d: %s", e.Line, e.Col, e.Message)
+					}
+					fmt.Fprintf(os.Stderr, "=== %s ===\n%s\n", entry.Name(), input)
+				}
 			}
 		})
 	}

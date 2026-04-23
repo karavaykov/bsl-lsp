@@ -96,6 +96,12 @@ type (
 		Label string
 	}
 
+	LabelStmt struct {
+		Label string
+		Line  int
+		Col   int
+	}
+
 	VarDeclExpr struct {
 		Name string
 		Line int
@@ -108,9 +114,12 @@ type (
 	}
 
 	CallStmt struct {
-		Function string
-		Object   Node
-		Args     []Node
+		Function     string
+		Object       Node
+		Args         []Node
+		Line, Col    int
+		ParenLine    int
+		ParenCol     int
 	}
 
 	BinaryExpr struct {
@@ -176,8 +185,9 @@ type (
 	}
 
 	FieldAccessExpr struct {
-		Object Node
-		Field  string
+		Object    Node
+		Field     string
+		Line, Col int
 	}
 
 	NewExpr struct {
@@ -222,6 +232,11 @@ type (
 		Name string
 	}
 
+	IllegalStmt struct {
+		Line int
+		Col  int
+	}
+
 	Comment struct {
 		Text string
 		Line int
@@ -230,6 +245,7 @@ type (
 )
 
 func (m *Module) Pos() (int, int)           { return 0, 0 }
+func (p *ParamDecl) Pos() (int, int)          { return 0, 0 }
 func (p *Procedure) Pos() (int, int)         { return p.Line, p.Col }
 func (f *Function) Pos() (int, int)          { return f.Line, f.Col }
 func (i *IfStmt) Pos() (int, int)            { return i.Line, i.Col }
@@ -243,9 +259,10 @@ func (r *RaiseStmt) Pos() (int, int)         { return 0, 0 }
 func (c *CycleStmt) Pos() (int, int)         { return 0, 0 }
 func (b *BreakStmt) Pos() (int, int)         { return 0, 0 }
 func (g *GotoStmt) Pos() (int, int)          { return 0, 0 }
+func (l *LabelStmt) Pos() (int, int)         { return l.Line, l.Col }
 func (v *VarDeclExpr) Pos() (int, int)       { return v.Line, v.Col }
 func (a *AssignmentStmt) Pos() (int, int)    { return a.Left.Pos() }
-func (c *CallStmt) Pos() (int, int)          { return 0, 0 }
+func (c *CallStmt) Pos() (int, int)         { return c.Line, c.Col }
 func (b *BinaryExpr) Pos() (int, int)        { return b.Left.Pos() }
 func (u *UnaryExpr) Pos() (int, int)         { return 0, 0 }
 func (t *TernaryExpr) Pos() (int, int)       { return t.Condition.Pos() }
@@ -267,6 +284,7 @@ func (h *HashIfBlock) Pos() (int, int)       { return 0, 0 }
 func (e *HashElseIfBranch) Pos() (int, int)  { return 0, 0 }
 func (r *RegionBlock) Pos() (int, int)       { return 0, 0 }
 func (c *CompilerDirective) Pos() (int, int) { return 0, 0 }
+func (i *IllegalStmt) Pos() (int, int)       { return i.Line, i.Col }
 func (c *Comment) Pos() (int, int)           { return c.Line, c.Col }
 
 func (_ *Module) nodeMarker()             {}
@@ -284,6 +302,7 @@ func (_ *RaiseStmt) nodeMarker()          {}
 func (_ *CycleStmt) nodeMarker()          {}
 func (_ *BreakStmt) nodeMarker()          {}
 func (_ *GotoStmt) nodeMarker()          {}
+func (_ *LabelStmt) nodeMarker()         {}
 func (_ *VarDeclExpr) nodeMarker()       {}
 func (_ *AssignmentStmt) nodeMarker()     {}
 func (_ *CallStmt) nodeMarker()           {}
@@ -308,4 +327,5 @@ func (_ *HashIfBlock) nodeMarker()        {}
 func (_ *HashElseIfBranch) nodeMarker()   {}
 func (_ *RegionBlock) nodeMarker()        {}
 func (_ *CompilerDirective) nodeMarker()  {}
+func (_ *IllegalStmt) nodeMarker()        {}
 func (_ *Comment) nodeMarker()            {}

@@ -1,5 +1,7 @@
 package protocol
 
+import "encoding/json"
+
 type Position struct {
 	Line      int `json:"line"`
 	Character int `json:"character"`
@@ -50,11 +52,27 @@ type InitializeResult struct {
 }
 
 type ServerCapabilities struct {
-	TextDocumentSync       int                `json:"textDocumentSync"`
-	DocumentSymbolProvider bool               `json:"documentSymbolProvider,omitempty"`
-	DefinitionProvider     bool               `json:"definitionProvider,omitempty"`
-	HoverProvider          bool               `json:"hoverProvider,omitempty"`
-	CompletionProvider     *CompletionOptions `json:"completionProvider,omitempty"`
+	TextDocumentSync            int                     `json:"textDocumentSync"`
+	DocumentSymbolProvider      bool                    `json:"documentSymbolProvider,omitempty"`
+	DefinitionProvider          bool                    `json:"definitionProvider,omitempty"`
+	HoverProvider               bool                    `json:"hoverProvider,omitempty"`
+	CompletionProvider          *CompletionOptions      `json:"completionProvider,omitempty"`
+	SemanticTokensProvider      *SemanticTokensOptions  `json:"semanticTokensProvider,omitempty"`
+	CodeLensProvider            *CodeLensOptions        `json:"codeLensProvider,omitempty"`
+	FoldingRangeProvider        bool                    `json:"foldingRangeProvider,omitempty"`
+	DocumentFormattingProvider  bool                    `json:"documentFormattingProvider,omitempty"`
+	SignatureHelpProvider       *SignatureHelpOptions   `json:"signatureHelpProvider,omitempty"`
+}
+
+type SemanticTokensOptions struct {
+	Legend SemanticTokensLegend `json:"legend"`
+	Full   bool                 `json:"full"`
+}
+
+type CodeLensOptions struct{}
+
+type SignatureHelpOptions struct {
+	TriggerCharacters []string `json:"triggerCharacters,omitempty"`
 }
 
 type CompletionOptions struct {
@@ -191,3 +209,91 @@ const (
 	SymbolKindOperator    = 25
 	SymbolKindTypeParameter = 26
 )
+
+type SemanticTokensParams struct {
+	TextDocument struct {
+		URI string `json:"uri"`
+	} `json:"textDocument"`
+}
+
+type SemanticTokens struct {
+	Data []int `json:"data"`
+}
+
+type SemanticTokensLegend struct {
+	TokenTypes     []string `json:"tokenTypes"`
+	TokenModifiers []string `json:"tokenModifiers"`
+}
+
+type CodeLensParams struct {
+	TextDocument struct {
+		URI string `json:"uri"`
+	} `json:"textDocument"`
+}
+
+type CodeLens struct {
+	Range   Range           `json:"range"`
+	Command *Command        `json:"command,omitempty"`
+	Data    json.RawMessage `json:"data,omitempty"`
+}
+
+type Command struct {
+	Title     string          `json:"title"`
+	Command   string          `json:"command"`
+	Arguments []json.RawMessage `json:"arguments,omitempty"`
+}
+
+type FoldingRangeParams struct {
+	TextDocument struct {
+		URI string `json:"uri"`
+	} `json:"textDocument"`
+}
+
+type FoldingRange struct {
+	StartLine      int    `json:"startLine"`
+	StartCharacter int    `json:"startCharacter,omitempty"`
+	EndLine        int    `json:"endLine"`
+	EndCharacter   int    `json:"endCharacter,omitempty"`
+	Kind           string `json:"kind,omitempty"`
+}
+
+type DocumentFormattingParams struct {
+	TextDocument struct {
+		URI string `json:"uri"`
+	} `json:"textDocument"`
+	Options FormattingOptions `json:"options"`
+}
+
+type FormattingOptions struct {
+	TabSize      int  `json:"tabSize"`
+	InsertSpaces bool `json:"insertSpaces"`
+}
+
+type TextEdit struct {
+	Range   Range  `json:"range"`
+	NewText string `json:"newText"`
+}
+
+type SignatureHelpParams struct {
+	TextDocument struct {
+		URI string `json:"uri"`
+	} `json:"textDocument"`
+	Position Position `json:"position"`
+}
+
+type SignatureHelp struct {
+	Signatures      []SignatureInformation `json:"signatures"`
+	ActiveSignature int                    `json:"activeSignature"`
+	ActiveParameter int                    `json:"activeParameter"`
+}
+
+type SignatureInformation struct {
+	Label         string                 `json:"label"`
+	Documentation string                 `json:"documentation,omitempty"`
+	Parameters    []ParameterInformation `json:"parameters,omitempty"`
+}
+
+type ParameterInformation struct {
+	Label         string `json:"label"`
+	Documentation string `json:"documentation,omitempty"`
+}

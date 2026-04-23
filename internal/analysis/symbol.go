@@ -20,6 +20,7 @@ type Symbol struct {
 	Line      int
 	Col       int
 	BodyScope *Scope
+	Export    bool
 }
 
 type Scope struct {
@@ -118,6 +119,7 @@ func (v *visitor) visitModuleStatement(n parser.Node) {
 		bodyScope := v.table.EnterScope(v.table.Global)
 		sym := v.addSymbol(n.Name, SymbolProcedure, v.table.Global, line, col)
 		sym.BodyScope = bodyScope
+		sym.Export = n.Export
 		for _, p := range n.Params {
 			v.addSymbol(p.Name, SymbolParameter, bodyScope, line, col)
 		}
@@ -128,6 +130,7 @@ func (v *visitor) visitModuleStatement(n parser.Node) {
 		bodyScope := v.table.EnterScope(v.table.Global)
 		sym := v.addSymbol(n.Name, SymbolFunction, v.table.Global, line, col)
 		sym.BodyScope = bodyScope
+		sym.Export = n.Export
 		for _, p := range n.Params {
 			v.addSymbol(p.Name, SymbolParameter, bodyScope, line, col)
 		}

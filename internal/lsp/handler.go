@@ -21,6 +21,7 @@ type Handler struct {
 	initialized bool
 	workspace   *workspace.Manager
 	documents   map[string]*documentState
+	project     *analysis.ProjectAnalysis
 	logf        LogFunc
 }
 
@@ -28,6 +29,7 @@ func NewHandler(logf LogFunc) *Handler {
 	return &Handler{
 		workspace: workspace.NewManager(),
 		documents: make(map[string]*documentState),
+		project:   analysis.NewProjectAnalysis(),
 		logf:      logf,
 	}
 }
@@ -61,6 +63,16 @@ func (h *Handler) Handle(req jsonRPCMessage) *jsonRPCMessage {
 		return h.handleHover(req)
 	case "textDocument/completion":
 		return h.handleCompletion(req)
+	case "textDocument/semanticTokens/full":
+		return h.handleSemanticTokens(req)
+	case "textDocument/codeLens":
+		return h.handleCodeLens(req)
+	case "textDocument/foldingRange":
+		return h.handleFoldingRange(req)
+	case "textDocument/formatting":
+		return h.handleFormatting(req)
+	case "textDocument/signatureHelp":
+		return h.handleSignatureHelp(req)
 	case "shutdown":
 		return &jsonRPCMessage{
 			JSONRPC: "2.0",
@@ -96,6 +108,11 @@ func (h *Handler) handleInitialize(req jsonRPCMessage) *jsonRPCMessage {
 		}
 	}
 
+	semTokLegend := protocol.SemanticTokensLegend{
+		TokenTypes:     []string{"keyword", "variable", "function", "method", "parameter", "property", "string", "number", "comment", "operator"},
+		TokenModifiers: []string{},
+	}
+
 	result := protocol.InitializeResult{
 		Capabilities: protocol.ServerCapabilities{
 			TextDocumentSync:   1,
@@ -104,6 +121,16 @@ func (h *Handler) handleInitialize(req jsonRPCMessage) *jsonRPCMessage {
 			HoverProvider:          true,
 			CompletionProvider: &protocol.CompletionOptions{
 				TriggerCharacters: []string{".", " "},
+			},
+			SemanticTokensProvider: &protocol.SemanticTokensOptions{
+				Legend: semTokLegend,
+				Full:   true,
+			},
+			CodeLensProvider:     &protocol.CodeLensOptions{},
+			FoldingRangeProvider: true,
+			DocumentFormattingProvider: true,
+			SignatureHelpProvider: &protocol.SignatureHelpOptions{
+				TriggerCharacters: []string{"(", ","},
 			},
 		},
 	}
@@ -172,6 +199,7 @@ func (h *Handler) handleDidClose(req jsonRPCMessage) {
 	}
 	h.workspace.Close(params.TextDocument.URI)
 	delete(h.documents, params.TextDocument.URI)
+	h.project.RemoveModule(params.TextDocument.URI)
 }
 
 func (h *Handler) publishDiagnostics(uri string) {
@@ -204,6 +232,7 @@ func (h *Handler) publishDiagnostics(uri string) {
 		doc:     doc,
 		symbols: symbols,
 	}
+	h.project.UpdateModule(uri, symbols)
 
 	diagParams := struct {
 		URI         string                `json:"uri"`
@@ -337,7 +366,19 @@ func (h *Handler) handleDefinition(req jsonRPCMessage) *jsonRPCMessage {
 
 	sym := state.symbols.Lookup(ident.Name)
 	if sym == nil {
-		return h.jsonResult(req.ID, []byte("null"))
+		foundURI, foundSym := h.project.LookupSymbol(ident.Name)
+		if foundSym == nil {
+			return h.jsonResult(req.ID, []byte("null"))
+		}
+		loc := protocol.Location{
+			URI: foundURI,
+			Range: protocol.Range{
+				Start: protocol.Position{Line: foundSym.Line, Character: foundSym.Col},
+				End:   protocol.Position{Line: foundSym.Line, Character: foundSym.Col + len(foundSym.Name)},
+			},
+		}
+		data, _ := json.Marshal(loc)
+		return h.jsonResult(req.ID, data)
 	}
 
 	loc := protocol.Location{
@@ -380,7 +421,13 @@ func (h *Handler) handleHover(req jsonRPCMessage) *jsonRPCMessage {
 		return h.jsonResult(req.ID, []byte("null"))
 	}
 
-	sym := state.symbols.Lookup(ident.Name)
+	var sym *analysis.Symbol
+
+	sym = state.symbols.Lookup(ident.Name)
+	if sym == nil {
+		_, foundSym := h.project.LookupSymbol(ident.Name)
+		sym = foundSym
+	}
 	if sym == nil {
 		return h.jsonResult(req.ID, []byte("null"))
 	}
@@ -392,7 +439,11 @@ func (h *Handler) handleHover(req jsonRPCMessage) *jsonRPCMessage {
 		analysis.SymbolParameter: "Параметр",
 	}[sym.Kind]
 
-	content := fmt.Sprintf("**%s** `%s`", kindStr, sym.Name)
+	exportTag := ""
+	if sym.Export {
+		exportTag = " (Экспорт)"
+	}
+	content := fmt.Sprintf("**%s** `%s`%s", kindStr, sym.Name, exportTag)
 
 	hover := protocol.Hover{
 		Contents: protocol.MarkupContent{
@@ -487,6 +538,29 @@ func (h *Handler) handleCompletion(req jsonRPCMessage) *jsonRPCMessage {
 				Detail: sym.Kind.String(),
 			})
 		}
+
+		for _, ms := range h.project.Modules {
+			if ms.URI == params.TextDocument.URI {
+				continue
+			}
+			for name, sym := range ms.Exports {
+				if seen[name] {
+					continue
+				}
+				seen[name] = true
+
+				ckind := protocol.CompletionKindMethod
+				switch sym.Kind {
+				case analysis.SymbolFunction:
+					ckind = protocol.CompletionKindFunction
+				}
+				items = append(items, protocol.CompletionItem{
+					Label:  name,
+					Kind:   ckind,
+					Detail: sym.Kind.String() + " (Экспорт, " + ms.URI + ")",
+				})
+			}
+		}
 	}
 
 	if items == nil {
@@ -556,4 +630,202 @@ func (h *Handler) collectChildren(parent *analysis.Symbol, table *analysis.Symbo
 	}
 
 	return children
+}
+
+func (h *Handler) handleSemanticTokens(req jsonRPCMessage) *jsonRPCMessage {
+	var params protocol.SemanticTokensParams
+	if err := json.Unmarshal(req.Params, &params); err != nil {
+		return h.jsonError(req.ID, -32700, fmt.Sprintf("parse error: %v", err))
+	}
+
+	state, ok := h.documents[params.TextDocument.URI]
+	if !ok {
+		return h.jsonResult(req.ID, []byte(`{"data":[]}`))
+	}
+
+	doc, ok := h.workspace.Get(params.TextDocument.URI)
+	if !ok {
+		return h.jsonResult(req.ID, []byte(`{"data":[]}`))
+	}
+
+	text := doc.GetText()
+	p := parser.NewParser(text)
+	mod := p.ParseModule()
+
+	tokens := analysis.CollectSemanticTokens(mod, state.symbols)
+	data, _ := json.Marshal(protocol.SemanticTokens{Data: tokens})
+	return h.jsonResult(req.ID, data)
+}
+
+func (h *Handler) handleCodeLens(req jsonRPCMessage) *jsonRPCMessage {
+	var params protocol.CodeLensParams
+	if err := json.Unmarshal(req.Params, &params); err != nil {
+		return h.jsonError(req.ID, -32700, fmt.Sprintf("parse error: %v", err))
+	}
+
+	state, ok := h.documents[params.TextDocument.URI]
+	if !ok {
+		return h.jsonResult(req.ID, []byte("[]"))
+	}
+
+	var result []protocol.CodeLens
+	for _, sym := range state.symbols.Symbols {
+		if sym.Scope != state.symbols.Global {
+			continue
+		}
+		if sym.Kind != analysis.SymbolProcedure && sym.Kind != analysis.SymbolFunction {
+			continue
+		}
+
+		exportLabel := ""
+		if sym.Export {
+			exportLabel = "Экспорт"
+		} else {
+			exportLabel = "Локальная"
+		}
+
+		result = append(result, protocol.CodeLens{
+			Range: protocol.Range{
+				Start: protocol.Position{Line: sym.Line, Character: sym.Col},
+				End:   protocol.Position{Line: sym.Line, Character: sym.Col + len(sym.Name)},
+			},
+			Command: &protocol.Command{
+				Title:   exportLabel,
+				Command: "",
+			},
+		})
+	}
+
+	if result == nil {
+		result = []protocol.CodeLens{}
+	}
+
+	data, _ := json.Marshal(result)
+	return h.jsonResult(req.ID, data)
+}
+
+func (h *Handler) handleFoldingRange(req jsonRPCMessage) *jsonRPCMessage {
+	var params protocol.FoldingRangeParams
+	if err := json.Unmarshal(req.Params, &params); err != nil {
+		return h.jsonError(req.ID, -32700, fmt.Sprintf("parse error: %v", err))
+	}
+
+	state, ok := h.documents[params.TextDocument.URI]
+	if !ok {
+		return h.jsonResult(req.ID, []byte("[]"))
+	}
+
+	doc, ok := h.workspace.Get(params.TextDocument.URI)
+	if !ok {
+		return h.jsonResult(req.ID, []byte("[]"))
+	}
+
+	text := doc.GetText()
+	p := parser.NewParser(text)
+	mod := p.ParseModule()
+
+	ranges := analysis.CollectFoldingRanges(mod, state.symbols)
+
+	var result []protocol.FoldingRange
+	for _, r := range ranges {
+		result = append(result, protocol.FoldingRange{
+			StartLine: r.StartLine,
+			EndLine:   r.EndLine,
+			Kind:      r.Kind,
+		})
+	}
+
+	if result == nil {
+		result = []protocol.FoldingRange{}
+	}
+
+	data, _ := json.Marshal(result)
+	return h.jsonResult(req.ID, data)
+}
+
+func (h *Handler) handleFormatting(req jsonRPCMessage) *jsonRPCMessage {
+	var params protocol.DocumentFormattingParams
+	if err := json.Unmarshal(req.Params, &params); err != nil {
+		return h.jsonError(req.ID, -32700, fmt.Sprintf("parse error: %v", err))
+	}
+
+	doc, ok := h.workspace.Get(params.TextDocument.URI)
+	if !ok {
+		return h.jsonResult(req.ID, []byte("[]"))
+	}
+
+	text := doc.GetText()
+	formatted := analysis.FormatDocument(text, params.Options.TabSize, params.Options.InsertSpaces)
+
+	edits := []protocol.TextEdit{{
+		Range: protocol.Range{
+			Start: protocol.Position{Line: 0, Character: 0},
+			End:   protocol.Position{Line: len(text), Character: 0},
+		},
+		NewText: formatted,
+	}}
+
+	data, _ := json.Marshal(edits)
+	return h.jsonResult(req.ID, data)
+}
+
+func (h *Handler) handleSignatureHelp(req jsonRPCMessage) *jsonRPCMessage {
+	var params protocol.SignatureHelpParams
+	if err := json.Unmarshal(req.Params, &params); err != nil {
+		return h.jsonError(req.ID, -32700, fmt.Sprintf("parse error: %v", err))
+	}
+
+	state, ok := h.documents[params.TextDocument.URI]
+	if !ok {
+		return h.jsonResult(req.ID, []byte("null"))
+	}
+
+	doc, ok := h.workspace.Get(params.TextDocument.URI)
+	if !ok {
+		return h.jsonResult(req.ID, []byte("null"))
+	}
+
+	text := doc.GetText()
+	p := parser.NewParser(text)
+	mod := p.ParseModule()
+
+	line := params.Position.Line
+	col := params.Position.Character
+
+	call := analysis.FindCallAtPos(mod, line+1, col+1)
+	if call == nil {
+		return h.jsonResult(req.ID, []byte("null"))
+	}
+
+	sym := state.symbols.Lookup(call.Name)
+	if sym == nil {
+		_, foundSym := h.project.LookupSymbol(call.Name)
+		sym = foundSym
+	}
+	if sym == nil {
+		return h.jsonResult(req.ID, []byte("null"))
+	}
+
+	sig := protocol.SignatureInformation{
+		Label: sym.Kind.String() + " " + call.Name + "(...)",
+	}
+
+	if sym.BodyScope != nil {
+		for _, child := range state.symbols.Symbols {
+			if child.Scope == sym.BodyScope && child.Kind == analysis.SymbolParameter {
+				sig.Parameters = append(sig.Parameters, protocol.ParameterInformation{
+					Label: child.Name,
+				})
+			}
+		}
+	}
+
+	help := protocol.SignatureHelp{
+		Signatures:      []protocol.SignatureInformation{sig},
+		ActiveSignature: 0,
+		ActiveParameter: call.ActiveParam,
+	}
+
+	data, _ := json.Marshal(help)
+	return h.jsonResult(req.ID, data)
 }

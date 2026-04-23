@@ -144,7 +144,16 @@ func (p *Parser) parseStatement() Node {
 		return p.parseGotoStmt()
 	case TokenVar:
 		return p.parseVarDecl()
+	case TokenTilde:
+		return p.parseLabelDef()
+	case TokenSemicolon:
+		p.nextToken()
+		return nil
 	case TokenComment, TokenPreprocessor, TokenDirective:
+		p.nextToken()
+		return nil
+	case TokenHashIf, TokenHashElseIf, TokenHashElse, TokenHashEndIf:
+		p.error("preprocessor conditional directives are not allowed inside procedures and blocks")
 		p.nextToken()
 		return nil
 	default:
@@ -156,7 +165,9 @@ func isStmtStart(t TokenType) bool {
 	switch t {
 	case TokenIf, TokenWhile, TokenFor, TokenTry,
 		TokenReturn, TokenRaise, TokenCycle, TokenBreak, TokenGoTo, TokenVar,
-		TokenComment, TokenPreprocessor, TokenDirective,
+		TokenComment, TokenPreprocessor, TokenDirective, TokenTilde,
+		TokenHashRegion, TokenHashEndRegion, TokenHashArea,
+		TokenHashIf, TokenHashElseIf, TokenHashElse, TokenHashEndIf,
 		TokenIdent, TokenNumber, TokenString, TokenDate,
 		TokenTrue, TokenFalse, TokenUndefined, TokenNull,
 		TokenMinus, TokenNot, TokenNew, TokenExecute,
@@ -176,6 +187,12 @@ func (p *Parser) parseBlock(endTokens ...TokenType) []Node {
 			if p.curTokenIs(et) {
 				return stmts
 			}
+		}
+
+		if p.curTokenIs(TokenIllegal) {
+			p.error("illegal token: %s", p.curToken.Literal)
+			p.nextToken()
+			continue
 		}
 
 		stmt := p.parseStatement()
@@ -221,6 +238,8 @@ func (p *Parser) parseProcedure() *Procedure {
 	if p.isIdentToken() {
 		proc.Name = p.curToken.Literal
 		p.nextToken()
+	} else {
+		p.error("expected procedure name")
 	}
 
 	p.skipComments()
@@ -256,6 +275,8 @@ func (p *Parser) parseFunction() *Function {
 	if p.isIdentToken() {
 		fn.Name = p.curToken.Literal
 		p.nextToken()
+	} else {
+		p.error("expected function name")
 	}
 
 	p.skipComments()
@@ -295,6 +316,8 @@ func (p *Parser) parseParamList() []*ParamDecl {
 		if p.curTokenIs(TokenIdent) {
 			param.Name = p.curToken.Literal
 			p.nextToken()
+		} else {
+			p.error("expected parameter name")
 		}
 
 		params = append(params, param)
@@ -407,6 +430,8 @@ func (p *Parser) parseForStmt() *ForStmt {
 	if p.curTokenIs(TokenIdent) {
 		stmt.Var = p.curToken.Literal
 		p.nextToken()
+	} else {
+		p.error("expected loop variable")
 	}
 
 	if p.curTokenIs(TokenEqual) {
@@ -456,6 +481,8 @@ func (p *Parser) parseForEachStmt() *ForEachStmt {
 	if p.curTokenIs(TokenIdent) {
 		stmt.Var = p.curToken.Literal
 		p.nextToken()
+	} else {
+		p.error("expected loop variable")
 	}
 
 	if p.curTokenIs(TokenIn) {
@@ -495,6 +522,8 @@ func (p *Parser) parseTryStmt() *TryStmt {
 	if p.curTokenIs(TokenExcept) {
 		p.nextToken()
 		stmt.Except = p.parseBlock(TokenEndTry)
+	} else if p.curTokenIs(TokenEndTry) {
+		p.error("expected ИСКЛЮЧЕНИЕ")
 	}
 
 	if p.curTokenIs(TokenEndTry) {
@@ -534,12 +563,37 @@ func (p *Parser) parseGotoStmt() *GotoStmt {
 	stmt := &GotoStmt{}
 	p.nextToken()
 
-	if p.curTokenIs(TokenIdent) {
-		stmt.Label = p.curToken.Literal
+	if p.curTokenIs(TokenTilde) {
 		p.nextToken()
 	}
 
+	if p.curTokenIs(TokenIdent) {
+		stmt.Label = p.curToken.Literal
+		p.nextToken()
+	} else {
+		p.error("expected label after ПЕРЕЙТИ")
+	}
+
 	return stmt
+}
+
+func (p *Parser) parseLabelDef() Node {
+	tok := p.curToken
+	p.nextToken()
+	if p.curTokenIs(TokenIdent) {
+		label := &LabelStmt{
+			Label: p.curToken.Literal,
+			Line:  tok.Line,
+			Col:   tok.Col,
+		}
+		p.nextToken()
+		if p.curTokenIs(TokenColon) {
+			p.nextToken()
+		}
+		return label
+	}
+	p.error("expected label name after ~")
+	return &LabelStmt{Label: "", Line: tok.Line, Col: tok.Col}
 }
 
 // ============================================================
@@ -625,12 +679,36 @@ func (p *Parser) parseRegion() Node {
 }
 
 func (p *Parser) parseExpressionStmt() Node {
+	if p.curTokenIs(TokenRParen) || p.curTokenIs(TokenRBracket) || p.curTokenIs(TokenColon) || p.curTokenIs(TokenComma) {
+		p.error("unexpected token %s (%s)", p.curToken.Type, p.curToken.Literal)
+		p.nextToken()
+		return nil
+	}
+
 	expr := p.parseExpression()
 	if expr == nil {
 		return nil
 	}
 
+	if be, ok := expr.(*BinaryExpr); ok && be.Op == TokenEqual {
+		if ident, ok := be.Left.(*Ident); ok && ident.Name == "_" {
+			p.error("bare underscore is not a valid identifier")
+			return nil
+		}
+		// Конвертируем сравнение '=' обратно в присваивание
+		if isAssignLHS(be.Left) && !p.curTokenIs(TokenEqual) {
+			stmt := &AssignmentStmt{Left: be.Left, Right: be.Right}
+			return stmt
+		}
+	}
+
 	if p.curTokenIs(TokenAssign) || (p.curTokenIs(TokenEqual) && isAssignLHS(expr)) {
+		if ident, ok := expr.(*Ident); ok && ident.Name == "_" {
+			p.error("bare underscore is not a valid identifier")
+			p.nextToken()
+			p.parseExpression()
+			return nil
+		}
 		stmt := &AssignmentStmt{Left: expr}
 		p.nextToken()
 		stmt.Right = p.parseExpression()
@@ -639,6 +717,11 @@ func (p *Parser) parseExpressionStmt() Node {
 
 	if call, ok := expr.(*CallStmt); ok {
 		return call
+	}
+
+	switch expr.(type) {
+	case *NumberLit, *StringLit, *DateLit, *BoolLit, *UndefinedLit, *NullLit:
+		p.error("expression is not a valid statement")
 	}
 
 	return expr
@@ -668,6 +751,7 @@ const (
 	precOr                   // Или
 	precAdd                  // +, -
 	precMul                  // *, /, %
+	precPower                // ^
 	precPrefix               // - (unary), Не
 	precPostfix              // ., [ ]
 	precCall                 // (
@@ -688,6 +772,7 @@ var precedences = map[TokenType]precedence{
 	TokenStar:           precMul,
 	TokenSlash:          precMul,
 	TokenMod:            precMul,
+	TokenPower:          precPower,
 	TokenQuestion:       precTernary,
 	TokenAssign:         precAssign,
 }
@@ -745,11 +830,7 @@ func (p *Parser) parseBinaryOrTernary(prec precedence) Node {
 			break
 		}
 
-		// Не-тернарный бинарный оператор
-		// TokenEqual на верхнем уровне (precLowest) не обрабатываем как сравнение
-		if p.curTokenIs(TokenEqual) && prec == precLowest {
-			break
-		}
+			// Не-тернарный бинарный оператор
 		if p.isBinaryOp() || p.curTokenIs(TokenEqual) {
 			op := p.curToken.Type
 			p.nextToken()
@@ -769,7 +850,7 @@ func (p *Parser) parseBinaryOrTernary(prec precedence) Node {
 
 func (p *Parser) isBinaryOp() bool {
 	switch p.curToken.Type {
-	case TokenPlus, TokenMinus, TokenStar, TokenSlash, TokenMod,
+	case TokenPlus, TokenMinus, TokenStar, TokenSlash, TokenMod, TokenPower,
 		TokenNotEqual, TokenLess, TokenGreater,
 		TokenLessOrEqual, TokenGreaterOrEqual,
 		TokenAnd, TokenOr:
@@ -786,6 +867,13 @@ func (p *Parser) parsePrefix() Node {
 		return p.parseUnaryExpr()
 	case TokenNot:
 		return p.parseUnaryExpr()
+	case TokenQuestion:
+		if p.peekTokenIs(TokenLParen) {
+			return p.parseTernaryFunc()
+		}
+		tok := p.curToken
+		p.nextToken()
+		return &Ident{Name: tok.Literal, Line: tok.Line, Col: tok.Col}
 	case TokenNew:
 		return p.parseNewExpr()
 	case TokenExecute:
@@ -831,7 +919,7 @@ func (p *Parser) parsePrefix() Node {
 		return p.parseIdentOrCall()
 	case TokenLParen:
 		p.nextToken()
-		expr := p.parseExpression()
+		expr := p.parseCompareExpr()
 		if p.curTokenIs(TokenRParen) {
 			p.nextToken()
 		}
@@ -840,6 +928,11 @@ func (p *Parser) parsePrefix() Node {
 		return p.parseCompilerDirective()
 	default:
 		if p.curTokenIs(TokenEOF) {
+			return nil
+		}
+		if p.curTokenIs(TokenIllegal) {
+			p.error("illegal token: %s", p.curToken.Literal)
+			p.nextToken()
 			return nil
 		}
 		// Токены, которые не могут начинать выражение — молча пропускаем
@@ -862,6 +955,31 @@ func (p *Parser) parseUnaryExpr() *UnaryExpr {
 	return expr
 }
 
+func (p *Parser) parseTernaryFunc() Node {
+	tok := p.curToken
+	p.nextToken()
+	p.nextToken()
+	var args []Node
+	for !p.curTokenIs(TokenRParen) && !p.curTokenIs(TokenEOF) {
+		arg := p.parseExpression()
+		args = append(args, arg)
+		p.skipComments()
+		if p.curTokenIs(TokenComma) {
+			p.nextToken()
+		}
+		p.skipComments()
+	}
+	if p.curTokenIs(TokenRParen) {
+		p.nextToken()
+	}
+	return &CallStmt{
+		Function:  "?",
+		Args:      args,
+		Line:      tok.Line,
+		Col:       tok.Col,
+	}
+}
+
 func (p *Parser) parseIdentOrCall() Node {
 	tok := p.curToken
 	p.nextToken()
@@ -873,7 +991,7 @@ func (p *Parser) parseIdentOrCall() Node {
 
 		if p.curTokenIs(TokenDot) {
 			p.nextToken()
-			if p.curTokenIs(TokenIdent) {
+			if p.isFieldNameToken() {
 				expr = &FieldAccessExpr{Object: expr, Field: p.curToken.Literal}
 				p.nextToken()
 				continue
@@ -927,6 +1045,8 @@ func (p *Parser) parseNewExpr() *NewExpr {
 	if p.curTokenIs(TokenIdent) {
 		expr.TypeName = p.curToken.Literal
 		p.nextToken()
+	} else if !p.curTokenIs(TokenLParen) {
+		p.error("expected type name after НОВЫЙ")
 	}
 	if p.curTokenIs(TokenLParen) {
 		p.nextToken()
@@ -1022,6 +1142,24 @@ func (p *Parser) isExprStart() bool {
 func (p *Parser) isIdentToken() bool {
 	switch p.curToken.Type {
 	case TokenIdent, TokenExecute, TokenAddress, TokenTypeName, TokenVal:
+		return true
+	}
+	return false
+}
+
+func containsToken(tokens []TokenType, t TokenType) bool {
+	for _, tok := range tokens {
+		if tok == t {
+			return true
+		}
+	}
+	return false
+}
+
+func (p *Parser) isFieldNameToken() bool {
+	switch p.curToken.Type {
+	case TokenIdent, TokenNew, TokenExecute, TokenAddress, TokenTypeName, TokenVal,
+		TokenTrue, TokenFalse, TokenUndefined, TokenNull:
 		return true
 	}
 	return false

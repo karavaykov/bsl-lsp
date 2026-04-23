@@ -78,6 +78,7 @@ const (
 	TokenStar
 	TokenSlash
 	TokenMod
+	TokenPower
 	TokenEqual
 	TokenNotEqual
 	TokenLess
@@ -96,6 +97,9 @@ const (
 	TokenRParen
 	TokenLBracket
 	TokenRBracket
+
+	// Special
+	TokenTilde
 
 	// Comment
 	TokenComment
@@ -169,6 +173,7 @@ var tokenNames = map[TokenType]string{
 	TokenStar:                         "*",
 	TokenSlash:                        "/",
 	TokenMod:                          "%",
+	TokenPower:                        "^",
 	TokenEqual:                        "=",
 	TokenNotEqual:                     "<>",
 	TokenLess:                         "<",
@@ -188,6 +193,7 @@ var tokenNames = map[TokenType]string{
 	TokenComment:                      "//",
 	TokenPreprocessor:                 "PREPROCESSOR",
 	TokenDirective:                    "DIRECTIVE",
+	TokenTilde:                        "~",
 }
 
 func (t TokenType) String() string {

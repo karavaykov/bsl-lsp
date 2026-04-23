@@ -91,8 +91,12 @@ func (l *Lexer) NextToken() Token {
 		} else if l.peekChar() == '*' {
 			l.readChar()
 			l.readChar()
-			text := l.readBlockComment()
-			tok = NewToken(TokenComment, text, line, col)
+			text, ok := l.readBlockComment()
+			if !ok {
+				tok = NewToken(TokenIllegal, text+" (unclosed block comment)", line, col)
+			} else {
+				tok = NewToken(TokenComment, text, line, col)
+			}
 		} else {
 			tok = NewToken(TokenSlash, string(l.ch), line, col)
 			l.readChar()
@@ -100,6 +104,10 @@ func (l *Lexer) NextToken() Token {
 
 	case '%':
 		tok = NewToken(TokenMod, string(l.ch), line, col)
+		l.readChar()
+
+	case '^':
+		tok = NewToken(TokenPower, string(l.ch), line, col)
 		l.readChar()
 
 	case '=':
@@ -168,13 +176,25 @@ func (l *Lexer) NextToken() Token {
 		tok = NewToken(TokenRBracket, string(l.ch), line, col)
 		l.readChar()
 
+	case '~':
+		tok = NewToken(TokenTilde, string(l.ch), line, col)
+		l.readChar()
+
 	case '"':
-		val := l.readString()
-		tok = NewToken(TokenString, val, line, col)
+		val, ok := l.readString()
+		if !ok {
+			tok = NewToken(TokenIllegal, val+" (unclosed string)", line, col)
+		} else {
+			tok = NewToken(TokenString, val, line, col)
+		}
 
 	case '\'':
-		val := l.readDate()
-		tok = NewToken(TokenDate, val, line, col)
+		val, ok := l.readDate()
+		if !ok {
+			tok = NewToken(TokenIllegal, val+" (invalid date literal)", line, col)
+		} else {
+			tok = NewToken(TokenDate, val, line, col)
+		}
 
 	case '|':
 		l.readChar()
@@ -183,7 +203,7 @@ func (l *Lexer) NextToken() Token {
 
 	case '#':
 		val := l.readPreprocessor()
-		tok = NewToken(TokenPreprocessor, val, line, col)
+		tok = NewToken(l.lookupPreprocessor(val), val, line, col)
 
 	case '&':
 		val := l.readDirective()
@@ -226,11 +246,11 @@ func (l *Lexer) readComment() string {
 	return l.input[start:l.pos]
 }
 
-func (l *Lexer) readBlockComment() string {
+func (l *Lexer) readBlockComment() (string, bool) {
 	start := l.pos
 	for {
 		if l.ch == 0 {
-			break
+			return l.input[start:l.pos], false
 		}
 		if l.ch == '*' && l.peekChar() == '/' {
 			l.readChar()
@@ -239,10 +259,10 @@ func (l *Lexer) readBlockComment() string {
 		}
 		l.readChar()
 	}
-	return l.input[start:l.pos]
+	return l.input[start:l.pos], true
 }
 
-func (l *Lexer) readString() string {
+func (l *Lexer) readString() (string, bool) {
 	var result []rune
 	l.readChar()
 	for {
@@ -254,28 +274,38 @@ func (l *Lexer) readString() string {
 				continue
 			}
 			l.readChar()
-			break
+			return string(result), true
 		}
 		if l.ch == 0 {
-			break
+			return string(result), false
 		}
 		result = append(result, l.ch)
 		l.readChar()
 	}
-	return string(result)
 }
 
-func (l *Lexer) readDate() string {
+func (l *Lexer) readDate() (string, bool) {
 	l.readChar()
 	start := l.pos
 	for l.ch != '\'' && l.ch != 0 {
 		l.readChar()
 	}
 	val := l.input[start:l.pos]
+	ok := true
 	if l.ch == '\'' {
 		l.readChar()
 	}
-	return val
+	// Проверяем формат: только цифры и не пустая
+	for _, r := range val {
+		if r < '0' || r > '9' {
+			ok = false
+			break
+		}
+	}
+	if len(val) == 0 {
+		ok = false
+	}
+	return val, ok
 }
 
 func (l *Lexer) readIdent() string {
@@ -306,6 +336,31 @@ func (l *Lexer) readPreprocessor() string {
 		l.readChar()
 	}
 	return l.input[start:l.pos]
+}
+
+var preprocessorKeywords = map[string]TokenType{
+	"#если":          TokenHashIf,
+	"#иначеесли":     TokenHashElseIf,
+	"#иначе":         TokenHashElse,
+	"#конецесли":     TokenHashEndIf,
+	"#область":       TokenHashRegion,
+	"#конецобласти":  TokenHashEndRegion,
+	"#вставка":       TokenHashInsert,
+	"#удалить":       TokenHashDelete,
+}
+
+func (l *Lexer) lookupPreprocessor(val string) TokenType {
+	trimmed := val
+	for i, ch := range trimmed {
+		if ch == ' ' || ch == '\t' || ch == '\n' {
+			trimmed = trimmed[:i]
+			break
+		}
+	}
+	if t, ok := preprocessorKeywords[toLower(trimmed)]; ok {
+		return t
+	}
+	return TokenPreprocessor
 }
 
 func (l *Lexer) readDirective() string {
