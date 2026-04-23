@@ -15,6 +15,7 @@
 > - `internal/analysis/linters/` — 9 правил статического анализа, интегрированных в `publishDiagnostics`. При добавлении нового правила: создай файл в пакете `linters`, добавь функцию `checkXxx` в `rules` в `lint.go`, напиши тесты.
 > - **CRLF (`\r\n`)** — `readChar()` в лексере пропускает `\r` (line++ и col=0 только на `\n`). Все `.bsl` файлы корректно обрабатываются независимо от line endings (LF или CRLF).
 > - **Параметры со значениями по умолчанию** — `parseParamList()` пропускает `= <expr>` после имени параметра. BSL допускает `Знач Парам = Значение` и многострочные списки параметров.
+> - **MCP сервер (`internal/mcp/`)** — Streamable HTTP транспорт (POST `/` + SSE `/sse`), 7 tools (`bsl_parse`, `bsl_lint`, `bsl_format`, `bsl_symbols`, `bsl_define`, `bsl_hover`, `bsl_folding_ranges`), 2 prompts (`review_bsl_code`, `explain_bsl_module`), Resource store (hash-based кэш). При добавлении нового tool: зарегистрируй в `registerTools()` в `tools.go`, создай `handleXxx` метод в той же папке, добавь тест в `mcp_test.go`. Все инструменты переиспользуют существующие API из `parser`, `analysis`, `linters`.
 
 
 
@@ -23,16 +24,18 @@ LSP сервер для языка 1С (BSL). Чистый Go, zero external dep
 ## Команды
 
 ```bash
-go build -o bsl-lsp ./cmd/bsl-lsp   # бинарник
-go test -v ./...                    # все тесты (включая интеграционные на real .bsl)
-go vet ./...                        # статический анализ
+go build -o bsl-lsp ./cmd/bsl-lsp           # LSP сервер
+go build -o bsl-lsp-mcp ./cmd/bsl-lsp-mcp   # MCP сервер
+go test -v ./...                            # все тесты (включая интеграционные на real .bsl)
+go vet ./...                                # статический анализ
 ```
 
-Либо через `Makefile`: `make build`, `make test`, `make vet`, `make run`, `make clean`.
+Либо через `Makefile`: `make build`, `make test`, `make vet`, `make run`, `make run-mcp`, `make clean`.
 
 ## Архитектура
 
-- **`cmd/bsl-lsp/main.go`** — точка входа, вызывает `lsp.Run()`
+- **`cmd/bsl-lsp/main.go`** — точка входа LSP сервера, вызывает `lsp.Run()`
+- **`cmd/bsl-lsp-mcp/main.go`** — точка входа MCP сервера (`--host`, `--port`), запускает HTTP
 - **`internal/lsp/`** — JSON-RPC 2.0 через stdin/stdout (`Content-Length` заголовки), session, handler
 - **`internal/parser/`** — лексер (rune-based, UTF-8, полная кириллица) + рекурсивный спуск + AST
 - **`internal/analysis/`**:
@@ -52,8 +55,28 @@ go vet ./...                        # статический анализ
   - `suspicious_assign.go` — самоприсваивание (`a = a`)
   - `missing_return.go` — функция без `Возврат` в некоторых ветках
   - `global_var_in_proc.go` — присваивание глобальной переменной внутри процедуры
+- **`internal/mcp/`** — MCP сервер:
+  - `server.go` — `Server` struct, dispatch MCP методов (`initialize`, `tools/list/call`, `resources/list/read`, `prompts/list/get`)
+  - `transport.go` — Streamable HTTP: POST `/` → JSON-RPC, GET `/sse` → SSE stream
+  - `tools.go` — 7 инструментов (обёртки над `parser`, `analysis`, `linters`)
+  - `resources.go` — `ResourceStore` (hash-based кэш AST/диагностик/символов)
+  - `prompts.go` — 2 промпта: `review_bsl_code`, `explain_bsl_module`
+  - `types.go` — MCP-specific типы (`Tool`, `Resource`, `Prompt`, `ToolCallResult`, и т.д.)
 - **`internal/workspace/document.go`** — thread-safe Document + Manager
 - **`pkg/protocol/types.go`** — LSP типы
+
+## MCP протокол
+
+- Transport: Streamable HTTP (`POST /` — JSON-RPC 2.0, `GET /sse` — Server-Sent Events)
+- `initialize` → `InitializeResult` с capabilities (tools + resources + prompts)
+- `tools/list` → список 7 инструментов
+- `tools/call` → вызов инструмента по имени с аргументами
+- `resources/list` → список закешированных ресурсов
+- `resources/read` → чтение ресурса по URI (`bsl://<hash>/<type>`)
+- `prompts/list` → список 2 промптов
+- `prompts/get` → получение промпта по имени (сервер подставляет результаты анализа)
+- Неизвестные методы возвращают JSON-RPC error `-32601`
+- Нотификации через SSE при изменении списка tools/resources
 
 ## LSP протокол
 
@@ -98,3 +121,5 @@ go vet ./...                        # статический анализ
 - `skipComments()` пропускает комментарии и препроцессор при разборе statement'ов
 - `consumeSemicolon` в `parseBlock`, `nextToken` в Break/Cycle
 - AST узлы Procedure/Function/If/While/For/ForEach/Try хранят `Line`/`Col` позиции (исправлено, не через `Directives[0]`)
+- MCP tools переиспользуют существующие API: `parser.NewParser`, `analysis.BuildSymbolTable`, `linters.RunAll`, `analysis.FormatDocument`, `analysis.FindIdentAtPos`, `analysis.CollectFoldingRanges`
+- При добавлении нового MCP tool: зарегистрируй в `registerTools()` в `tools.go`, реализуй `handleXxx`, добавь тест в `mcp_test.go`

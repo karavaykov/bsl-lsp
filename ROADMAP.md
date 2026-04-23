@@ -60,6 +60,16 @@
 - [x] SKILL.md и README.md обновлены (Docker-команды)
 - [x] Сохранение zero external dependencies
 
+## ✅ Фаза H — MCP сервер
+- [x] `internal/mcp/` — полный MCP сервер: Transport (HTTP + SSE), Server (JSON-RPC dispatch), Tools (7 инструментов), Resources (кэш анализа), Prompts (2 шаблона)
+- [x] Streamable HTTP transport (POST `/` + SSE `/sse`)
+- [x] 7 tools: `bsl_parse`, `bsl_lint`, `bsl_format`, `bsl_symbols`, `bsl_define`, `bsl_hover`, `bsl_folding_ranges`
+- [x] 2 prompts: `review_bsl_code`, `explain_bsl_module`
+- [x] `cmd/bsl-lsp-mcp/main.go` — entry point (флаги `--host`, `--port`)
+- [x] Zero external dependencies (только stdlib)
+- [x] Makefile цели: `make build`, `make run-mcp`
+- [x] Тесты: все MCP методы, инструменты, промпты
+
 ## 🔲 Фаза G — промышленное качество
 - [ ] Бенчмарки (10k+ строк), zero-alloc paths
 - [ ] Структурированные логи (slog, уровни, structured)
