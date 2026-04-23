@@ -45,6 +45,12 @@ func (l *Lexer) readChar() {
 	l.pos = l.readPos
 	l.readPos += size
 
+	if r == '\r' {
+		// CRLF: if next char is \n, skip \r and read \n next call
+		l.col++
+		return
+	}
+
 	if r == '\n' {
 		l.line++
 		l.col = 0
@@ -249,6 +255,10 @@ func (l *Lexer) skipWhitespace() {
 func (l *Lexer) readComment() string {
 	start := l.pos
 	for l.ch != '\n' && l.ch != 0 {
+		if l.ch == '\r' {
+			l.readChar()
+			continue
+		}
 		l.readChar()
 	}
 	return l.input[start:l.pos]

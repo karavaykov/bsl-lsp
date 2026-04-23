@@ -347,6 +347,16 @@ func (p *Parser) parseParamList() []*ParamDecl {
 			p.nextToken()
 		}
 
+		// skip default value: = <expr>
+		if p.curTokenIs(TokenEqual) {
+			p.nextToken()
+			p.skipComments()
+			// skip the default value expression (single token or literal)
+			if !p.curTokenIs(TokenComma) && !p.curTokenIs(TokenRParen) && !p.curTokenIs(TokenEOF) {
+				p.nextToken()
+			}
+		}
+
 		params = append(params, param)
 
 		p.skipComments()
