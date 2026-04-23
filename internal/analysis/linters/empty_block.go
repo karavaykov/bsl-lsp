@@ -65,7 +65,7 @@ func checkEmptyInNode(n parser.Node) []LintDiagnostic {
 			}
 			diags = append(diags, checkEmptyInBlock(ei.Body)...)
 		}
-		if isEmptyBlock(n.ElseBody) {
+		if n.ElseBody != nil && isEmptyBlock(n.ElseBody) {
 			diags = append(diags, LintDiagnostic{
 				Line:     n.Line,
 				Col:      0,
@@ -75,7 +75,9 @@ func checkEmptyInNode(n parser.Node) []LintDiagnostic {
 				Severity: SevInfo,
 			})
 		}
-		diags = append(diags, checkEmptyInBlock(n.ElseBody)...)
+		if n.ElseBody != nil {
+			diags = append(diags, checkEmptyInBlock(n.ElseBody)...)
+		}
 		return diags
 	case *parser.WhileStmt:
 		if isEmptyBlock(n.Body) {
