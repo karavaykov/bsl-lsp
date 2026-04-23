@@ -35,6 +35,22 @@
 - [x] Тесты для каждого правила (позитивные + негативные)
 - [x] Сохранение zero external dependencies
 
+## Critical Context
+
+> Текущее состояние: bsl-lsp работает **только через LSP (stdin/stdout)**. CLI-режима для одноразовых вызовов (`check`, `format`) нет.
+>
+> **Проблема:** для интеграции с OpenCode (через SKILL.md) нужны CLI-команды `bsl-lsp check <file>` и `bsl-lsp format <file>`, т.к. агент выполняет Bash/PowerShell, а не LSP.
+>
+> **Варианты решения:**
+> - **A** — добавить CLI-режим в `cmd/bsl-lsp/` (subcommands `check`, `format`)
+> - **B** — написать PowerShell-обёртку, вызывающую LSP через stdin/stdout (без изменений Go-кода)
+>
+> **Связанные файлы:**
+> - `internal/lsp/` — LSP handler (можно переиспользовать для CLI)
+> - `internal/analysis/linters/` — 9 правил стат. анализа
+> - `internal/analysis/formatter.go` — форматирование
+> - `internal/parser/` — парсер
+
 ## 🔲 Фаза E — промышленное качество
 - [ ] Бенчмарки (10k+ строк), zero-alloc paths
 - [ ] Структурированные логи (slog, уровни, structured)
