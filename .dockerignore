@@ -1,0 +1,11 @@
+.git/
+.gitignore
+.gitattributes
+.vscode/
+.idea/
+*.md
+LICENSE
+testdata/
+*.test
+bsl-lsp
+bsl-lsp.exe

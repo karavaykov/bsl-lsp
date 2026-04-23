@@ -51,7 +51,16 @@
 > SKILL.md использует прямой вызов CLI вместо LSP-обёрток.  
 > Выбран вариант **A** — subcommands в `cmd/bsl-lsp/` с ручным dispatch через `os.Args`.
 
-## 🔲 Фаза F — промышленное качество
+## ✅ Фаза F — Docker + CI/CD
+- [x] Dockerfile (alpine 3.19, мультистейдж)
+- [x] `.dockerignore`
+- [x] GitHub Actions: `lint` → `test` → `build` → `docker` (push в GHCR)
+- [x] Автоматическая сборка при каждом пуше в `master`
+- [x] Образ `ghcr.io/karavaykov/bsl-lsp:latest`
+- [x] SKILL.md и README.md обновлены (Docker-команды)
+- [x] Сохранение zero external dependencies
+
+## 🔲 Фаза G — промышленное качество
 - [ ] Бенчмарки (10k+ строк), zero-alloc paths
 - [ ] Структурированные логи (slog, уровни, structured)
 - [ ] Конфигурация LSP через `initialize` (опции клиента)

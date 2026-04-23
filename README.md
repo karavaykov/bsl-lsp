@@ -36,6 +36,12 @@ make build
 
 Бинарник появится в `./bsl-lsp`.
 
+Или через Docker (без локального Go):
+
+```bash
+docker pull ghcr.io/karavaykov/bsl-lsp:latest
+```
+
 ## Использование
 
 ### LSP-сервер (для редакторов)
@@ -86,6 +92,21 @@ require('lspconfig').bsl_lsp.setup {
   cmd = { '/path/to/bsl-lsp' }
 }
 ```
+
+### Docker
+
+```bash
+# проверка синтаксиса
+docker run --rm -v "$PWD:/work" ghcr.io/karavaykov/bsl-lsp:latest check /work/module.bsl
+
+# форматирование in-place (требует права на запись)
+docker run --rm -v "$PWD:/work" -u "$(id -u):$(id -g)" ghcr.io/karavaykov/bsl-lsp:latest format /work/module.bsl
+
+# форматирование с выводом в stdout
+docker run --rm -v "$PWD:/work" ghcr.io/karavaykov/bsl-lsp:latest format --stdout /work/module.bsl > clean.bsl
+```
+
+Образ автоматически собирается и публикуется в GHCR через GitHub Actions при каждом пуше в `master`.
 
 ## Разработка
 

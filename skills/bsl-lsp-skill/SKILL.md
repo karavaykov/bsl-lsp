@@ -12,7 +12,12 @@ description: "1C:Enterprise (BSL) syntax checking, static analysis, and code for
 - **Static analysis (9 rules)** — unused variables, empty blocks, unreachable code, magic numbers, too many parameters, nested depth, self-assignment, missing return in functions, global variable assignment inside procedures
 - **Formatting** — auto-formatting of BSL code
 
-Binary location on this machine: `C:\Users\karavaikov.s\opencodeproj\bsl-lsp\bsl-lsp.exe` (Windows) or `/mnt/c/Users/karavaikov.s/opencodeproj/bsl-lsp/bsl-lsp` (WSL/Linux)
+Binary location on this machine: `C:\Users\karavaikov.s\opencodeproj\bsl-lsp\bsl-lsp.exe` (Windows) or `/mnt/c/Users/karavaikov.s/opencodeproj/bsl-lsp/bsl-lsp` (WSL/Linux).
+
+Also available as Docker image on GitHub Container Registry:
+```
+ghcr.io/karavaykov/bsl-lsp:latest
+```
 
 ## CLI Commands
 
@@ -43,6 +48,14 @@ bsl-lsp format <file.bsl>
 To stdout (preview):
 ```bash
 bsl-lsp format --stdout <file.bsl> > formatted.bsl
+```
+
+### Using Docker (portable, no local Go needed)
+
+```bash
+docker run --rm -v "$PWD:/work" ghcr.io/karavaykov/bsl-lsp:latest check /work/module.bsl
+docker run --rm -v "$PWD:/work" ghcr.io/karavaykov/bsl-lsp:latest format /work/module.bsl
+docker run --rm -v "$PWD:/work" ghcr.io/karavaykov/bsl-lsp:latest format --stdout /work/module.bsl
 ```
 
 ### Start LSP server (for editors)
