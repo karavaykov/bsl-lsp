@@ -3,6 +3,7 @@ package lsp
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/karavaikov/bsl-lsp/internal/analysis"
@@ -217,10 +218,14 @@ func (h *Handler) publishDiagnostics(uri string) {
 	for _, err := range p.Errors() {
 		line := err.Line - 1
 		col := err.Col - 1
+		length := err.Length
+		if length < 1 {
+			length = 1
+		}
 		diagnostics = append(diagnostics, protocol.Diagnostic{
 			Range: protocol.Range{
 				Start: protocol.Position{Line: line, Character: col},
-				End:   protocol.Position{Line: line, Character: col + 1},
+				End:   protocol.Position{Line: line, Character: col + length},
 			},
 			Severity: protocol.SeverityError,
 			Message:  err.Message,
@@ -757,10 +762,11 @@ func (h *Handler) handleFormatting(req jsonRPCMessage) *jsonRPCMessage {
 	text := doc.GetText()
 	formatted := analysis.FormatDocument(text, params.Options.TabSize, params.Options.InsertSpaces)
 
+	lineCount := strings.Count(text, "\n")
 	edits := []protocol.TextEdit{{
 		Range: protocol.Range{
 			Start: protocol.Position{Line: 0, Character: 0},
-			End:   protocol.Position{Line: len(text), Character: 0},
+			End:   protocol.Position{Line: lineCount, Character: 0},
 		},
 		NewText: formatted,
 	}}

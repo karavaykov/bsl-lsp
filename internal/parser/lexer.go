@@ -21,8 +21,16 @@ func NewLexer(input string) *Lexer {
 		line:  1,
 		col:   0,
 	}
+	l.skipBOM()
 	l.readChar()
 	return l
+}
+
+func (l *Lexer) skipBOM() {
+	if len(l.input) >= 3 && l.input[:3] == "\xef\xbb\xbf" {
+		l.pos = 3
+		l.readPos = 3
+	}
 }
 
 func (l *Lexer) readChar() {

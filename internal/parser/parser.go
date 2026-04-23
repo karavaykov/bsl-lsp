@@ -7,6 +7,7 @@ import (
 type ParseError struct {
 	Line    int
 	Col     int
+	Length  int
 	Message string
 }
 
@@ -15,7 +16,10 @@ type Parser struct {
 	curToken  Token
 	peekToken Token
 	errors    []ParseError
+	tokenCount int
 }
+
+const maxTokens = 500000
 
 func NewParser(input string) *Parser {
 	p := &Parser{
@@ -27,8 +31,14 @@ func NewParser(input string) *Parser {
 }
 
 func (p *Parser) nextToken() {
+	if p.tokenCount > maxTokens {
+		p.curToken = Token{Type: TokenEOF}
+		p.peekToken = Token{Type: TokenEOF}
+		return
+	}
 	p.curToken = p.peekToken
 	p.peekToken = p.lexer.NextToken()
+	p.tokenCount++
 }
 
 func (p *Parser) curTokenIs(t TokenType) bool {
@@ -49,17 +59,27 @@ func (p *Parser) expectPeek(t TokenType) bool {
 }
 
 func (p *Parser) errorExpected(t TokenType) {
+	length := len(p.peekToken.Literal)
+	if length == 0 {
+		length = 1
+	}
 	p.errors = append(p.errors, ParseError{
 		Line:    p.peekToken.Line,
 		Col:     p.peekToken.Col,
+		Length:  length,
 		Message: fmt.Sprintf("expected %s, got %s (%s)", t, p.peekToken.Type, p.peekToken.Literal),
 	})
 }
 
 func (p *Parser) error(format string, args ...interface{}) {
+	length := len(p.curToken.Literal)
+	if length == 0 {
+		length = 1
+	}
 	p.errors = append(p.errors, ParseError{
 		Line:    p.curToken.Line,
 		Col:     p.curToken.Col,
+		Length:  length,
 		Message: fmt.Sprintf(format, args...),
 	})
 }
@@ -77,6 +97,12 @@ func (p *Parser) skipComments() {
 
 // ParseModule — модуль верхнего уровня
 func (p *Parser) ParseModule() *Module {
+	defer func() {
+		if r := recover(); r != nil {
+			p.error("parser panic: %v", r)
+		}
+	}()
+
 	mod := &Module{}
 
 	for !p.curTokenIs(TokenEOF) {
@@ -318,6 +344,7 @@ func (p *Parser) parseParamList() []*ParamDecl {
 			p.nextToken()
 		} else {
 			p.error("expected parameter name")
+			p.nextToken()
 		}
 
 		params = append(params, param)
@@ -961,7 +988,16 @@ func (p *Parser) parseTernaryFunc() Node {
 	p.nextToken()
 	var args []Node
 	for !p.curTokenIs(TokenRParen) && !p.curTokenIs(TokenEOF) {
+		p.skipComments()
+		if p.curTokenIs(TokenComma) {
+			args = append(args, nil)
+			p.nextToken()
+			continue
+		}
 		arg := p.parseExpression()
+		if arg == nil {
+			break
+		}
 		args = append(args, arg)
 		p.skipComments()
 		if p.curTokenIs(TokenComma) {
@@ -1013,7 +1049,16 @@ func (p *Parser) parseIdentOrCall() Node {
 			p.nextToken()
 			var args []Node
 			for !p.curTokenIs(TokenRParen) && !p.curTokenIs(TokenEOF) {
+				p.skipComments()
+				if p.curTokenIs(TokenComma) {
+					args = append(args, nil)
+					p.nextToken()
+					continue
+				}
 				arg := p.parseExpression()
+				if arg == nil {
+					break
+				}
 				args = append(args, arg)
 				p.skipComments()
 				if p.curTokenIs(TokenComma) {
@@ -1051,7 +1096,16 @@ func (p *Parser) parseNewExpr() *NewExpr {
 	if p.curTokenIs(TokenLParen) {
 		p.nextToken()
 		for !p.curTokenIs(TokenRParen) && !p.curTokenIs(TokenEOF) {
+			p.skipComments()
+			if p.curTokenIs(TokenComma) {
+				expr.Args = append(expr.Args, nil)
+				p.nextToken()
+				continue
+			}
 			arg := p.parseExpression()
+			if arg == nil {
+				break
+			}
 			expr.Args = append(expr.Args, arg)
 			if p.curTokenIs(TokenComma) {
 				p.nextToken()
