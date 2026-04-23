@@ -152,6 +152,31 @@ docker run --rm -v "$PWD:/work" -u "$(id -u):$(id -g)" ghcr.io/karavaykov/bsl-ls
 docker run --rm -v "$PWD:/work" ghcr.io/karavaykov/bsl-lsp:latest format --stdout /work/module.bsl > clean.bsl
 ```
 
+### MCP сервер в Docker
+
+```bash
+# через docker-compose (порт 9090)
+docker compose up
+
+# порт можно поменять в docker-compose.yml
+```
+
+Пример `docker-compose.yml` (изменение порта на 8080):
+```yaml
+services:
+  bsl-lsp-mcp:
+    image: ghcr.io/karavaykov/bsl-lsp:latest
+    entrypoint: ["bsl-lsp-mcp", "--port", "9090", "--host", "0.0.0.0"]
+    ports:
+      - "9090:9090"    # меняй левый порт при необходимости
+    restart: unless-stopped
+```
+
+```bash
+# или напрямую:
+docker run --rm -p 9090:9090 ghcr.io/karavaykov/bsl-lsp:latest bsl-lsp-mcp --port 9090 --host 0.0.0.0
+```
+
 Образ автоматически собирается и публикуется в GHCR через GitHub Actions при каждом пуше в `master`.
 
 ## Разработка

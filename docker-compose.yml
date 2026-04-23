@@ -1,0 +1,7 @@
+services:
+  bsl-lsp-mcp:
+    image: ghcr.io/karavaykov/bsl-lsp:latest
+    entrypoint: ["bsl-lsp-mcp", "--port", "9090", "--host", "0.0.0.0"]
+    ports:
+      - "9090:9090"
+    restart: unless-stopped
