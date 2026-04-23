@@ -1,0 +1,14 @@
+# bin
+bsl-lsp
+/bsl-lsp
+*.exe
+
+# ide
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# os
+.DS_Store
+Thumbs.db
